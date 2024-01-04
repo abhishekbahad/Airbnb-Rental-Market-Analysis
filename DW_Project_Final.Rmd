@@ -1,0 +1,811 @@
+---
+title: "DW_Project"
+author: "Abhishek Bahad"
+date: "2023-04-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(jsonlite)
+library(rvest)
+library(tidyverse)
+library(tm)
+library(wordcloud)
+library(tidytext)
+library(mapboxer)
+library(broom)
+```
+
+```{r}
+NYC <- fromJSON("AirbnbNYC.json")
+Cali <- fromJSON("AirbnbCali.json")
+Dallas <- fromJSON("AirbnbDallas.json")
+DC <- fromJSON("AirbnbDC.json")
+Hawaii <- fromJSON("AirbnbHawaii.json")
+```
+
+
+```{r}
+NYC <- NYC %>% mutate(destination = "NYC") %>% distinct()
+Cali <- Cali %>% mutate(destination = "California") %>% distinct()
+Dallas <- Dallas %>% mutate(destination = "Dallas") %>% distinct()
+Hawaii <- Hawaii %>% mutate(destination = "Hawaii") %>% distinct()
+DC <- DC %>% mutate(destination = "DC") %>% distinct()
+```
+
+
+```{r}
+Airbnb_data <- bind_rows(DC,Cali,NYC,Dallas,Hawaii)
+```
+
+
+```{r}
+#colSums(is.na(Airbnb_data))
+Airbnb_data %>% summarise_all(funs(sum(is.na(.)))) %>% select_if(~!any(. == 0))
+```
+
+
+```{r}
+Airbnb_data %>% glimpse()
+```
+
+
+```{r}
+Airbnb_data %>% distinct(roomType)
+```
+
+
+```{r}
+Airbnb_data %>% group_by(roomType) %>% summarise(count = n())
+```
+
+
+```{r}
+Roomtype <- Airbnb_data %>% group_by(roomType) %>% summarise(count = n()) %>%
+  filter(count > 50)
+```
+
+
+```{r}
+ggplot(data = Roomtype,aes(y=reorder(roomType,count),x=count,fill = roomType)) +
+  geom_bar(stat = 'identity') +
+  xlab("Count") + ylab("Room Type") + ggtitle("Distribution by Room Type") +
+  theme(legend.position = 'none', plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+Roomtype %>% mutate(percent = (count/sum(count))*100) -> Roomtype
+```
+
+
+```{r}
+ggplot(Roomtype, aes(x = "", y = count, fill = roomType)) + 
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  geom_text(aes(label = paste0(round(percent),"%")), position = position_stack(vjust = 0.5)) +
+  ggtitle("Distribution by Room Type") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+Airbnb_data %>% filter(!is.na(stars))%>%group_by(destination)%>%summarise(rating = mean(stars))
+
+Airbnb_data %>% filter(!is.na(stars))%>%group_by(destination)%>%summarise(rating = min(stars))
+```
+
+
+```{r}
+rating <- Airbnb_data%>%filter(!is.na(stars))
+```
+
+
+```{r}
+rating %>% filter(stars < 5) %>%
+  ggplot() + 
+  geom_boxplot(aes(x=destination,y=stars,color=destination)) + 
+  xlab("Destination") + ylab("Stars") + ggtitle("Box plot of rating by destination") +
+  theme(legend.position ='none', plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+price_destination <- Airbnb_data %>% mutate(price=pricing$rate$amount) %>% filter(!is.na(price)) %>%
+  select(destination,price,name,stars)
+```
+
+
+```{r}
+price_room <- Airbnb_data %>% mutate(price=pricing$rate$amount) %>% filter(!is.na(price)) %>%
+  select(roomType,price,name) %>%
+  filter(roomType == 'Entire home' | roomType == 'Entire rental unit' | roomType == 'Entire condo' |
+           roomType == 'Entire villa' | roomType == 'Entire townhouse')
+```
+
+
+```{r}
+price_destination %>%
+  ggplot() + geom_boxplot(aes(x=destination,y=price,color=destination)) + 
+  xlab("Destination") + ylab("Price") + ggtitle("Box plot of price by destination") +
+  theme(legend.position ='none', plot.title = element_text(hjust = 0.5))
+```
+
+
+
+```{r}
+price_destination %>% filter(price < 2500) %>%
+  ggplot() + geom_boxplot(aes(x=destination,y=price,color=destination)) +
+  xlab("Destination") + ylab("Price") + ggtitle("Box Plot for affordable prices by destination") +
+  theme(legend.position ='none', plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+price_destination %>% filter(price > 2500, price < 15000) %>%
+  ggplot() + geom_boxplot(aes(x=destination,y=price,color=destination)) + 
+  xlab("Destination") + ylab("Price") + ggtitle("Box plot of Mid Ranged Prices by Destination") +
+  theme(legend.position ='none', plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+price_destination %>% filter(price > 15000) %>%
+  ggplot() + geom_boxplot(aes(x=destination,y=price,color=destination)) + 
+  xlab("Destination") + ylab("Price") + ggtitle("Box plot for High Ranged Prices by Destination") +
+  theme(legend.position ='none', plot.title = element_text(hjust = 0.5)) 
+```
+
+
+```{r}
+price_room %>% filter(price < 2500) %>%
+  ggplot() + geom_boxplot(aes(x=roomType,y=price,color=roomType)) + 
+  xlab("Room Type") + ylab("Price") + ggtitle("Box Plot for affordable prices by Room Type") +
+  theme(legend.position ='none', plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+price_room %>% filter(price > 2500, price < 15000) %>%
+  ggplot() + geom_boxplot(aes(x=roomType,y=price,color=roomType)) + 
+  xlab("Room Type") + ylab("Price") + ggtitle("Box-plot for Mid Ranged Prices by Room Type") +
+  theme(legend.position ='none')
+```
+
+
+```{r}
+Guests <- Airbnb_data %>% group_by(numberOfGuests) %>% summarise(count = n())
+```
+
+
+```{r}
+ggplot(data = Guests,aes(x=reorder(numberOfGuests, numberOfGuests), y=count, fill = numberOfGuests)) +
+  geom_bar(stat = 'identity') + 
+  theme(legend.position = 'none') 
+```
+
+
+```{r}
+Airbnb_data %>% mutate(price = pricing$rate$amount) %>%
+  select(price, stars, destination, name) %>% filter(price < 1000, stars < 5, stars > 4) %>%
+  ggplot(aes(x = price, y = stars, color = destination)) +
+  geom_point()
+```
+
+
+```{r}
+# create a corpus of the "name" field
+NYC_corpus <- Corpus(VectorSource(NYC$name))
+  
+# clean and preprocess the text
+NYC_corpus <- tm_map(NYC_corpus, removePunctuation)
+NYC_corpus <- tm_map(NYC_corpus, content_transformer(tolower))
+NYC_corpus <- tm_map(NYC_corpus, removeWords, stopwords("english"))
+NYC_corpus <- tm_map(NYC_corpus, removeWords, c("mins", "minutes", "near"))
+  
+# create a term-document matrix
+NYC_tdm <- TermDocumentMatrix(NYC_corpus, control = list(wordLengths = c(3, Inf)))
+  
+# convert the tdm to a matrix and calculate the frequencies
+m <- as.matrix(NYC_tdm)
+v <- sort(rowSums(m), decreasing = TRUE)
+  
+# create a wordcloud
+wordcloud(names(v), v, max.words = 50, scale = c(4, 0.5),
+            colors = brewer.pal(8, "Dark2"))
+```
+
+
+```{r}
+# create a corpus of the "name" field
+Cali_corpus <- Corpus(VectorSource(Cali$name))
+  
+# clean and preprocess the text
+Cali_corpus <- tm_map(Cali_corpus, removePunctuation)
+Cali_corpus <- tm_map(Cali_corpus, content_transformer(tolower))
+Cali_corpus <- tm_map(Cali_corpus, removeWords, stopwords("english"))
+Cali_corpus <- tm_map(Cali_corpus, removeWords, c("mins", "minutes", "near"))
+  
+# create a term-document matrix
+Cali_tdm <- TermDocumentMatrix(Cali_corpus, control = list(wordLengths = c(3, Inf)))
+  
+# convert the tdm to a matrix and calculate the frequencies
+m <- as.matrix(Cali_tdm)
+v <- sort(rowSums(m), decreasing = TRUE)
+  
+# create a wordcloud
+wordcloud(names(v), v, max.words = 50, scale = c(4, 0.5),
+            colors = brewer.pal(8, "Dark2"))
+```
+
+
+```{r}
+# create a corpus of the "name" field
+DC_corpus <- Corpus(VectorSource(DC$name))
+  
+# clean and preprocess the text
+DC_corpus <- tm_map(DC_corpus, removePunctuation)
+DC_corpus <- tm_map(DC_corpus, content_transformer(tolower))
+DC_corpus <- tm_map(DC_corpus, removeWords, stopwords("english"))
+DC_corpus <- tm_map(DC_corpus, removeWords, c("mins", "minutes", "near"))
+  
+# create a term-document matrix
+DC_tdm <- TermDocumentMatrix(DC_corpus, control = list(wordLengths = c(3, Inf)))
+  
+# convert the tdm to a matrix and calculate the frequencies
+m <- as.matrix(DC_tdm)
+v <- sort(rowSums(m), decreasing = TRUE)
+  
+# create a wordcloud
+wordcloud(names(v), v, max.words = 50, scale = c(4, 0.5),
+            colors = brewer.pal(8, "Dark2"))
+```
+
+
+```{r}
+# create a corpus of the "name" field
+Dallas_corpus <- Corpus(VectorSource(Dallas$name))
+  
+# clean and preprocess the text
+Dallas_corpus <- tm_map(Dallas_corpus, removePunctuation)
+Dallas_corpus <- tm_map(Dallas_corpus, content_transformer(tolower))
+Dallas_corpus <- tm_map(Dallas_corpus, removeWords, stopwords("english"))
+Dallas_corpus <- tm_map(Dallas_corpus, removeWords, c("mins", "minutes", "near"))
+  
+# create a term-document matrix
+Dallas_tdm <- TermDocumentMatrix(Dallas_corpus, control = list(wordLengths = c(3, Inf)))
+  
+# convert the tdm to a matrix and calculate the frequencies
+m <- as.matrix(Dallas_tdm)
+v <- sort(rowSums(m), decreasing = TRUE)
+  
+# create a wordcloud
+wordcloud(names(v), v, max.words = 50, scale = c(4, 0.5),
+            colors = brewer.pal(8, "Dark2"))
+```
+
+
+```{r}
+# create a corpus of the "name" field
+Hawaii_corpus <- Corpus(VectorSource(Hawaii$name))
+  
+# clean and preprocess the text
+Hawaii_corpus <- tm_map(Hawaii_corpus, removePunctuation)
+Hawaii_corpus <- tm_map(Hawaii_corpus, content_transformer(tolower))
+Hawaii_corpus <- tm_map(Hawaii_corpus, removeWords, stopwords("english"))
+Hawaii_corpus <- tm_map(Hawaii_corpus, removeWords, c("mins", "minutes", "near"))
+  
+# create a term-document matrix
+Hawaii_tdm <- TermDocumentMatrix(Hawaii_corpus, control = list(wordLengths = c(3, Inf)))
+  
+# convert the tdm to a matrix and calculate the frequencies
+m <- as.matrix(Hawaii_tdm)
+v <- sort(rowSums(m), decreasing = TRUE)
+  
+# create a wordcloud
+wordcloud(names(v), v, max.words = 50, scale = c(4, 0.5),
+            colors = brewer.pal(8, "Dark2"))
+```
+
+
+```{r}
+Cali %>% mutate(latitude = location$lat) %>%
+  mutate(longitude = location$lng) %>% mutate(price=pricing$rate$amount)%>%
+  select(name, latitude, longitude, price) -> CaliMap
+
+NYC %>% mutate(latitude = location$lat) %>%
+  mutate(longitude = location$lng) %>% mutate(price=pricing$rate$amount)%>%
+  select(name, latitude, longitude, price) -> NYCMap
+
+DC %>% mutate(latitude = location$lat) %>%
+  mutate(longitude = location$lng) %>% mutate(price=pricing$rate$amount)%>%
+  select(name, latitude, longitude, price) -> DCMap
+
+Dallas %>% mutate(latitude = location$lat) %>%
+  mutate(longitude = location$lng) %>% mutate(price=pricing$rate$amount)%>%
+  select(name, latitude, longitude, price) -> DallasMap
+
+Hawaii %>% mutate(latitude = location$lat) %>%
+  mutate(longitude = location$lng) %>% mutate(price=pricing$rate$amount)%>%
+  select(name, latitude, longitude, price) -> HawaiiMap
+```
+
+
+```{r}
+# Create a source
+NYCMap %>%
+  mutate(color = ifelse(price > 2500, "red", "yellow")) %>%
+  as_mapbox_source(lng = "longitude", lat = "latitude") %>%
+  # Setup a map with the default source above
+  mapboxer(
+    center = c(-73.9165, 40.7114),
+    zoom = 10
+  ) %>%
+  # Add a navigation control
+  add_navigation_control() %>%
+  # Add a layer styling the data of the default source
+  add_circle_layer(
+    circle_color = c("get", "color"),
+    circle_radius = 3,
+    # Use a mustache template to add popups to the layer
+    popup = "Price: {{price}}"
+  )
+```
+
+
+```{r}
+# Create a source
+CaliMap %>%
+  mutate(color = ifelse(price > 2500, "red", "yellow")) %>%
+  as_mapbox_source(lng = "longitude", lat = "latitude") %>%
+  # Setup a map with the default source above
+  mapboxer(
+    center = c(-119.417931, 36.778259),
+    zoom = 5
+  ) %>%
+  # Add a navigation control
+  add_navigation_control() %>%
+  # Add a layer styling the data of the default source
+  add_circle_layer(
+    circle_color = c("get", "color"),
+    circle_radius = 3,
+    # Use a mustache template to add popups to the layer
+    popup = "Price: {{price}}"
+  )
+```
+
+
+```{r}
+# Create a source
+DCMap %>%
+  mutate(color = ifelse(price > 2500, "red", "yellow")) %>%
+  as_mapbox_source(lng = "longitude", lat = "latitude") %>%
+  # Setup a map with the default source above
+  mapboxer(
+    center = c(-77.0369, 38.9072),
+    zoom = 10
+  ) %>%
+  # Add a navigation control
+  add_navigation_control() %>%
+  # Add a layer styling the data of the default source
+  add_circle_layer(
+    circle_color = c("get", "color"),
+    circle_radius = 3,
+    # Use a mustache template to add popups to the layer
+    popup = "Price: {{price}}"
+  )
+```
+
+
+```{r}
+# Create a source
+DallasMap %>%
+  mutate(color = ifelse(price > 2500, "red", "yellow")) %>%
+  as_mapbox_source(lng = "longitude", lat = "latitude") %>%
+  # Setup a map with the default source above
+  mapboxer(
+    center = c(-96.7970, 32.7767),
+    zoom = 10
+  ) %>%
+  # Add a navigation control
+  add_navigation_control() %>%
+  # Add a layer styling the data of the default source
+  add_circle_layer(
+    circle_color = c("get", "color"),
+    circle_radius = 3,
+    # Use a mustache template to add popups to the layer
+    popup = "Price: {{price}}"
+  )
+```
+
+
+```{r}
+# Create a source
+HawaiiMap %>%
+  mutate(color = ifelse(price > 2500, "red", "yellow")) %>%
+  as_mapbox_source(lng = "longitude", lat = "latitude") %>%
+  # Setup a map with the default source above
+  mapboxer(
+    center = c(-157.85, 21.1974),
+    zoom = 7
+  ) %>%
+  # Add a navigation control
+  add_navigation_control() %>%
+  # Add a layer styling the data of the default source
+  add_circle_layer(
+    circle_color = c("get", "color"),
+    circle_radius = 3,
+    # Use a mustache template to add popups to the layer
+    popup = "Price: {{price}}"
+  )
+```
+
+
+```{r}
+Airbnb_data %>% select(primaryHost) %>% .[[1]] %>% select(hostUrl) %>% distinct()
+```
+
+
+```{r}
+NYC %>% 
+  mutate(max_size = map_int(reviews, ~ nrow(.x))) %>% filter(max_size == max(max_size))
+```
+Massive Duplex, 2BR & 2BTH East Village 9+ Guests
+
+
+```{r}
+NYC %>% 
+  mutate(max_size = map_int(reviews, ~ nrow(.x))) %>% filter(max_size == max(max_size)) %>%
+  select(reviews) %>% .[[1]] %>% .[[1]] %>% select(comments, createdAt) %>% 
+  arrange(createdAt) -> NYC_review
+```
+
+
+```{r}
+NYC_review %>% mutate(linenum = row_number()) %>% unnest_tokens(word, comments) %>%
+  inner_join(get_sentiments("bing")) %>% count(linenum, sentiment) %>% 
+  pivot_wider(names_from = "sentiment", values_from = "n") %>% 
+  mutate_all(funs(replace(., is.na(.), 0))) %>% mutate(sentiment = positive - negative) -> NYC_sentiment
+```
+
+
+```{r}
+ggplot(NYC_sentiment, aes(linenum, sentiment)) +
+  geom_bar(stat = "identity") + geom_smooth()
+```
+
+
+```{r}
+NYC_review %>% filter(row_number() == 290)
+```
+
+```{r}
+NYC_review %>% mutate(linenum = row_number()) %>% 
+  inner_join(filter(NYC_sentiment, sentiment < 0))
+```
+
+
+
+```{r}
+Cali %>% 
+  mutate(max_size = map_int(reviews, ~ nrow(.x))) %>% filter(max_size == max(max_size))
+```
+
+The Joshua Tree Starfire House + Hot Tub
+```{r}
+Cali %>% 
+  mutate(max_size = map_int(reviews, ~ nrow(.x))) %>% filter(max_size == max(max_size)) %>%
+  select(reviews) %>% .[[1]] %>% .[[1]] %>% select(comments, createdAt) %>% 
+  arrange(createdAt) -> Cali_review
+```
+
+
+```{r}
+Cali_review %>% mutate(linenum = row_number()) %>% unnest_tokens(word, comments) %>%
+  inner_join(get_sentiments("bing")) %>% count(linenum, sentiment) %>% 
+  pivot_wider(names_from = "sentiment", values_from = "n") %>% 
+  mutate_all(funs(replace(., is.na(.), 0))) %>% mutate(sentiment = positive - negative) -> Cali_sentiment
+```
+
+
+```{r}
+ggplot(Cali_sentiment, aes(linenum, sentiment)) +
+  geom_bar(stat = "identity") + geom_smooth()
+```
+
+
+```{r}
+Cali_review %>% mutate(linenum = row_number()) %>% 
+  inner_join(filter(Cali_sentiment, sentiment > 10)) -> Cali_pos
+```
+
+
+```{r}
+# create a corpus of the "name" field
+Positive_corpus <- Corpus(VectorSource(Cali_pos$comments))
+  
+# clean and preprocess the text
+Positive_corpus <- tm_map(Positive_corpus, removePunctuation)
+Positive_corpus <- tm_map(Positive_corpus, content_transformer(tolower))
+Positive_corpus <- tm_map(Positive_corpus, removeWords, stopwords("english"))
+Positive_corpus <- tm_map(Positive_corpus, removeWords, c("place", "ryan", "house", "stay"))
+  
+# create a term-document matrix
+Positive_tdm <- TermDocumentMatrix(Positive_corpus, control = list(wordLengths = c(3, Inf)))
+  
+# convert the tdm to a matrix and calculate the frequencies
+m <- as.matrix(Positive_tdm)
+v <- sort(rowSums(m), decreasing = TRUE)
+  
+# create a wordcloud
+wordcloud(names(v), v, max.words = 50, scale = c(4, 0.5),
+            colors = brewer.pal(8, "Dark2"))
+```
+
+
+
+```{r}
+DC %>% 
+  mutate(max_size = map_int(reviews, ~ nrow(.x))) %>% filter(max_size == max(max_size))
+```
+
+Charming row house with fireplace near everything	
+```{r}
+DC %>% 
+  mutate(max_size = map_int(reviews, ~ nrow(.x))) %>% filter(max_size == max(max_size)) %>%
+  select(reviews) %>% .[[1]] %>% .[[1]] %>% select(comments, createdAt) %>% 
+  arrange(createdAt) -> DC_review
+```
+
+
+```{r}
+DC_review %>% mutate(linenum = row_number()) %>% unnest_tokens(word, comments) %>%
+  inner_join(get_sentiments("bing")) %>% count(linenum, sentiment) %>% 
+  pivot_wider(names_from = "sentiment", values_from = "n") %>% 
+  mutate_all(funs(replace(., is.na(.), 0))) %>% mutate(sentiment = positive - negative) -> DC_sentiment
+```
+
+
+```{r}
+ggplot(DC_sentiment, aes(linenum, sentiment)) +
+  geom_bar(stat = "identity") + geom_smooth()
+```
+
+```{r}
+Dallas %>% 
+  mutate(max_size = map_int(reviews, ~ nrow(.x))) %>% filter(max_size == max(max_size))
+```
+
+Sonder at Butler Brothers | One-Bedroom Apartment
+```{r}
+Dallas %>% 
+  mutate(max_size = map_int(reviews, ~ nrow(.x))) %>% filter(max_size == max(max_size)) %>%
+  select(reviews) %>% .[[1]] %>% .[[1]] %>% select(comments, createdAt) %>% 
+  arrange(createdAt) -> Dallas_review
+```
+
+
+```{r}
+Dallas_review %>% mutate(linenum = row_number()) %>% unnest_tokens(word, comments) %>%
+  inner_join(get_sentiments("bing")) %>% count(linenum, sentiment) %>% 
+  pivot_wider(names_from = "sentiment", values_from = "n") %>% 
+  mutate_all(funs(replace(., is.na(.), 0))) %>% mutate(sentiment = positive - negative) -> Dallas_sentiment
+```
+
+
+```{r}
+ggplot(Dallas_sentiment, aes(linenum, sentiment)) +
+  geom_bar(stat = "identity") + geom_smooth()
+```
+
+
+```{r}
+DC_review %>% unnest_tokens(word, comments) -> tidy_DC
+Dallas_review %>% unnest_tokens(word, comments) -> tidy_Dallas
+```
+
+
+```{r}
+freq <- bind_rows(mutate(tidy_DC, title = "DC"), mutate(tidy_Dallas, title = "Dallas")) %>%
+  mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(stop_words) %>%
+  count(title, word) %>%
+  group_by(title) %>% mutate(prop = n/sum(n)) %>% select(-n)
+```
+
+
+```{r}
+freq <- freq %>% pivot_wider(names_from = "title", values_from = prop) %>% filter(word != "NA")
+freq <- freq %>% replace(is.na(.), 0)
+```
+
+
+```{r}
+ggplot(freq, aes(x = DC, y = Dallas)) +
+  geom_abline(color = "red", lty = 2, lwd = 2) +
+  geom_point(color = "grey") +
+  geom_text(aes(label = word), check_overlap = TRUE, hjust = -0.1, vjust = -0.1) +
+  scale_x_log10() + scale_y_log10() +
+  ggtitle("Proportion of words for DC vs Dallas") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+NYC_review %>% unnest_tokens(word, comments) -> tidy_NYC
+Cali_review %>% unnest_tokens(word, comments) -> tidy_Cali
+```
+
+
+```{r}
+freq <- bind_rows(mutate(tidy_NYC, title = "NYC"), mutate(tidy_Cali, title = "Cali")) %>%
+  mutate(word = str_extract(word, "[a-z']+")) %>% anti_join(stop_words) %>%
+  count(title, word) %>%
+  group_by(title) %>% mutate(prop = n/sum(n)) %>% select(-n)
+```
+
+
+```{r}
+freq <- freq %>% pivot_wider(names_from = "title", values_from = prop) %>% filter(word != "NA")
+freq <- freq %>% replace(is.na(.), 0)
+```
+
+
+```{r}
+ggplot(freq, aes(x = NYC, y = Cali)) +
+  geom_abline(color = "red", lty = 2, lwd = 2) +
+  geom_point(color = "grey") +
+  geom_text(aes(label = word), check_overlap = TRUE, hjust = -0.1, vjust = -0.1) +
+  scale_x_log10() + scale_y_log10() +
+  ggtitle("Proportion of words for NYC vs California") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+hosturl<-Airbnb_data%>%mutate(id=primaryHost$id)%>%mutate(url=primaryHost$hostUrl)%>%
+  select(id,url)
+```
+
+```{r}
+hosturl<-distinct(hosturl)
+```
+
+```{r}
+hostdata <- data.frame(num_reviews = numeric(),
+                       rating = numeric(),
+                       experince = numeric())
+for (i in 1:1583){
+  print(i)
+  url <- hosturl["url"][[1]][i]
+  details <-url%>%read_html()%>%
+  html_nodes("[class='v5ktbjn dir dir-ltr']")%>%
+  html_text()
+  if (length(str_split(details, " ")) == 3) {
+    df<-data.frame(num_reviews=str_split(details," ")[[1]],
+                   rating=str_split(details," ")[[2]],
+                   experience=str_split(details," ")[[3]])
+  }
+
+  hostdata <- rbind(hostdata, df)
+}
+```
+
+
+```{r}
+host <- bind_cols(hosturl, hostdata)
+```
+
+```{r}
+Airbnb_data %>% filter(!is.na(stars)) %>% 
+  filter(roomType == 'Entire home' | roomType == 'Entire rental unit' | roomType == 'Entire condo' |
+           roomType == 'Entire villa' | roomType == 'Entire townhouse') %>%
+  mutate(price = pricing$rate$amount) %>% mutate(id = primaryHost$id) %>% mutate(value = 1) %>%
+  select(value, id, stars, numberOfGuests, roomType, price, destination) %>% inner_join(host) %>%
+  select(-url,-id) %>%
+  group_by(destination) %>% mutate(rn = row_number()) %>%
+  pivot_wider(names_from = "destination", values_from = value, values_fill = 0) %>%
+  mutate(value = 1) %>% group_by(roomType) %>% mutate(rn = row_number()) %>%
+  pivot_wider(names_from = "roomType", values_from = value, values_fill = 0) %>% 
+  select(-rn, -num_reviews) %>% filter(price < 3000) %>% mutate(host_exp = as.numeric(experience)) %>%
+  mutate(host_rat = as.double(rating)) %>% select(-rating, -experience) -> Airbnb_model
+```
+
+
+```{r}
+regression <- lm(price ~ ., data = Airbnb_model)
+tidy(regression)
+```
+
+```{r}
+Airbnb_data %>% filter(!is.na(stars)) %>% 
+  filter(roomType == 'Entire home' | roomType == 'Entire rental unit' | roomType == 'Entire condo' |
+           roomType == 'Entire villa' | roomType == 'Entire townhouse') %>%
+  mutate(price = pricing$rate$amount) %>% mutate(id = primaryHost$id) %>% mutate(value = 1) %>%
+  select(value, id, stars, numberOfGuests, roomType, price, destination) %>% inner_join(host) %>%
+  select(-url,-id) %>%
+  group_by(roomType) %>% mutate(rn = row_number()) %>%
+  pivot_wider(names_from = "roomType", values_from = value, values_fill = 0) %>% 
+  select(-rn, -num_reviews) %>% filter(price < 3000) %>% mutate(host_exp = as.numeric(experience)) %>%
+  mutate(host_rat = as.double(rating)) %>% select(-rating, -experience) -> Airbnb_model
+```
+
+
+```{r}
+regression <- Airbnb_model %>% group_by(destination) %>%
+  do(tidy(lm(price ~ stars + numberOfGuests + host_rat, data = .)))
+
+regression
+```
+
+
+```{r}
+ggplot(data = filter(regression, term == "stars")) +
+  geom_point(aes(destination, estimate)) + 
+  ggtitle("Slope of stars vs Destination") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+ggplot(data = filter(regression, term == "numberOfGuests")) +
+  geom_point(aes(destination, estimate)) + 
+  ggtitle("Slope of Number of Guests vs Destination") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+ggplot(data = filter(regression, term == "host_rat")) +
+  geom_point(aes(destination, estimate)) +
+  ggtitle("Slope of Hosts Rating vs Destination") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+Airbnb_data %>% filter(!is.na(stars)) %>% 
+  filter(roomType == 'Entire home' | roomType == 'Entire rental unit' | roomType == 'Entire condo' |
+           roomType == 'Entire villa' | roomType == 'Entire townhouse') %>%
+  mutate(price = pricing$rate$amount) %>% mutate(id = primaryHost$id) %>% mutate(value = 1) %>%
+  select(value, id, stars, numberOfGuests, roomType, price, destination) %>% inner_join(host) %>%
+  select(-url,-id) %>%
+  select(-num_reviews) %>% filter(price < 3000) %>% mutate(host_exp = as.numeric(experience)) %>%
+  mutate(host_rat = as.double(rating)) %>% select(-rating, -experience) -> Airbnb_model
+```
+
+
+```{r}
+regression <- Airbnb_model %>% group_by(roomType) %>%
+  do(tidy(lm(price ~ stars + numberOfGuests + host_rat, data = .)))
+
+regression
+```
+
+
+```{r}
+ggplot(data = filter(regression, term == "stars")) +
+  geom_point(aes(roomType, estimate)) +
+  ggtitle("Slope of stars vs Type of Room") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+ggplot(data = filter(regression, term == "numberOfGuests")) +
+  geom_point(aes(roomType, estimate)) +
+  ggtitle("Slope of Number of Guests vs Type of Room") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+ggplot(data = filter(regression, term == "host_rat")) +
+  geom_point(aes(roomType, estimate)) +
+  ggtitle("Slope of Hosts Rating vs Type of Room") + theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+Airbnb_data %>% 
+  mutate(max_size = map_int(reviews, ~ nrow(.x))) %>% filter(stars < 4.5) %>%
+  ggplot(aes(x = stars, y = max_size)) +
+  geom_point()
+```
+
+
