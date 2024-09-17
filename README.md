@@ -28,8 +28,6 @@ This project analyzes Airbnb listings from several major U.S. cities, including 
 - Linear regression models are created to analyze the impact of several variables (room type, stars, number of guests, host experience) on the price of Airbnb listings.
 - The slope of different variables by destination and room type is analyzed and visualized to understand the relationship between these factors and price.
 
-## Additional Machine Learning Implementations  
-
 ### Price Prediction Using Machine Learning Models
 - Implement machine learning models like Decision Trees, Random Forest, and Gradient Boosting to predict Airbnb listing prices based on variables such as room type, guest capacity, and ratings.
   
