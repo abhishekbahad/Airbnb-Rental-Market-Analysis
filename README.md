@@ -7,6 +7,7 @@ This project analyzes Airbnb listings from several major U.S. cities, including 
 ## Key Features  
 
 ### Data Preprocessing
+- Sourced the data from an automated external API ( APIfy ), providing a seamless and efficient way to access the information.
 - The dataset consists of Airbnb listings from NYC, California, Dallas, DC, and Hawaii.
 - Each dataset is cleaned and merged into a single dataset for analysis.
 - Missing values are handled, and data is filtered for distinct room types and destinations.
